@@ -530,7 +530,9 @@ int questions(Id out[8], bool closed[8], int8_t brd[8]) {
 
 int places(Place out[PL_COUNT]) {
     int n = 0;
-    if(st.chapter >= 1) { out[n++] = PL_DUNES; out[n++] = PL_LIGHTHOUSE; }
+    // only places Szary has been to, or that the story has just sent him to
+    if(st.chapter >= 1) out[n++] = PL_DUNES;
+    if(flag(F_LH_ENTERED)) out[n++] = PL_LIGHTHOUSE;
     if(flag(F_CH1_DONE)) out[n++] = PL_BAR;
     if(flag(F_CH2_DONE)) { out[n++] = PL_PIER; out[n++] = PL_OFFICE; }
     if(flag(F_BUNKER_OPEN)) out[n++] = PL_BUNKER;

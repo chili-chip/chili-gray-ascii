@@ -394,6 +394,10 @@ void play_to_chapter5() {
     use(114, "door");
     CHECK(st.chapter == 1 && st.scene == S_DUNES, "chapter 1 on the dunes");
     CHECK(story::hint() == txt::hint_ch1a, "the first hint points at the lighthouse");
+    {
+        Place p[PL_COUNT];
+        CHECK(story::places(p) == 1 && p[0] == PL_DUNES, "the map has only the dunes before the lighthouse");
+    }
 
     // chapter 1
     recording = true;
@@ -402,6 +406,10 @@ void play_to_chapter5() {
     recording = false;
     use(150, "lighthouse door");
     CHECK(st.scene == S_LIGHTHOUSE && has(clue::door), "inside the lighthouse");
+    {
+        Place p[PL_COUNT];
+        CHECK(story::places(p) == 2 && p[1] == PL_LIGHTHOUSE, "the lighthouse is on the map once visited");
+    }
     use(32, "log");
     shot("03-lighthouse-inside");
     use(58, "cap");
