@@ -137,6 +137,7 @@ void after_clue(clue::Id c);  // checks chapter progress
 
 // Notebook
 bool met(Person p);
+bool clue_spent(clue::Id c);  // every combination and useful show with it is done
 int person_lines(Person p, txt::Id out[3]);
 int questions(txt::Id out[8], bool closed[8], int8_t board[8]);
 int places(Place out[PL_COUNT]);

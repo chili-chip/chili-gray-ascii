@@ -442,6 +442,8 @@ void play_to_chapter5() {
     shot("05-halina-fire");
     CHECK(has(clue::barrel), "the barrel was dragged");
     combine(clue::bike, clue::nosand, clue::w_rider);
+    CHECK(story::clue_spent(clue::bike) && story::clue_spent(clue::nosand), "combined clues are spent");
+    CHECK(!story::clue_spent(clue::lamp) && !story::clue_spent(clue::door), "clues never combined stay bright");
     combine(clue::h_evening, clue::h_bike, clue::w_saw);
     combine(clue::cap, clue::trail, clue::w_led);
     press(Button::X);

@@ -472,6 +472,8 @@ void notebook_draw() {
         case T_CLUES: {
             clue::Id c = clue_at(i);
             label = clue::name[c][st.lang];
+            // spent clues stay in the notebook, written in a fainter grey
+            if(story::clue_spent(c)) shade = on ? 5 : 2;
             if(c >= clue::w_rider) { font::ch(8, y, '*', on ? 6 : 3); }
             if(i == first_pick) mark = '+';
             if(on) detail = clue::note[c][st.lang];

@@ -482,6 +482,24 @@ void show(Person p, clue::Id c) {
     say(fallback[p]);
 }
 
+bool clue_spent(clue::Id c) {
+    // a clue is spent when everything it can still do is done; clues that
+    // were never part of a combination or a useful show stay bright, so
+    // the notebook does not give away the red herrings
+    bool used = false;
+    for(const auto &k : combos) {
+        if(k.a != c && k.b != c) continue;
+        used = true;
+        if(!has(k.result)) return false;
+    }
+    for(const auto &k : shows) {
+        if(k.c != c || k.gives == clue::COUNT) continue;
+        used = true;
+        if(!has(k.gives)) return false;
+    }
+    return used;
+}
+
 bool met(Person p) {
     switch(p) {
     case P_HALINA: return flag(F_HALINA1);
