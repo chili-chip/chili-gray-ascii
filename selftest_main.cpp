@@ -323,7 +323,7 @@ void test_texts() {
         for(int i = q_light; i <= q_final; i++) CHECK(font::length(text[i][l]) <= 28, "question too long: %s", text[i][l]);
         for(int i = board1_s1; i <= board3_s3; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 2, "board line too long: %s", text[i][l]);
         for(int i = choice_final_q; i <= choice_page_b; i++) CHECK(ui::wrap_lines(text[i][l], 28) <= 2, "choice too long: %s", text[i][l]);
-        for(int i = hint_prolog; i <= hint_ch5b; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        for(int i = hint_combine; i <= hint_ch5b; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
         // the log must not say K. is a woman: Kuba is the one who notices
         for(const char *s : {text[lh_log_1][l], clue::note[clue::log][l]})
             for(const char *w : {"PRZYSZŁA", "PRZYNIOSŁA", "HER ", "SHE "})
@@ -435,7 +435,8 @@ void play_to_chapter5() {
     wait(100);
     shot("04-trail-torch");
     use(334, "trail end");
-    CHECK(story::hint() == txt::hint_ch1c && !flag(F_HALINA1), "before Halina the hint only mentions a fire");
+    CHECK(ui::line_said(txt::think_cap), "Szary thinks the cap and the trail belong together");
+    CHECK(story::hint() == txt::hint_combine && !flag(F_HALINA1), "the cap and the trail wait: the hint says combine");
     recording = true;
     use(494, "Halina");
     recording = false;
@@ -450,6 +451,15 @@ void play_to_chapter5() {
     CHECK(!story::clue_spent(clue::lamp) && !story::clue_spent(clue::door), "clues never combined stay bright");
     combine(clue::h_evening, clue::h_bike, clue::w_saw);
     combine(clue::cap, clue::trail, clue::w_led);
+    CHECK(story::hint() == txt::hint_ch1d, "nothing left to combine: the hint points at the bar");
+    CHECK(story::hint_delay_s() < 60.0f, "chapter 1 helps sooner than later chapters");
+    {
+        // pressing A on something already seen does not hold the hint back
+        st.idle_s = 40.0f;
+        use(518, "barrel again");
+        CHECK(st.idle_s >= 40.0f, "looking again is not progress");
+        st.idle_s = 0.0f;
+    }
     press(Button::X);
     shot("06-notebook-clues");
     press(Button::DPAD_RIGHT);

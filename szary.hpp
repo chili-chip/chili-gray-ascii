@@ -160,6 +160,7 @@ bool board_done(Board b);
 bool board_submit(Board b, const uint8_t picks[3]);
 
 txt::Id hint();
+float hint_delay_s();  // seconds without progress before a hint
 }  // namespace story
 
 // ------------------------------------------------------------------ world
@@ -187,6 +188,7 @@ namespace ui {
 void say(txt::Group g);
 void say_line(txt::Id id);
 bool dialog_open();
+bool line_said(txt::Id id);  // the last single line (thought or hint) was this one
 bool dialog_typing();
 void dialog_press();
 void dialog_update(float dt);

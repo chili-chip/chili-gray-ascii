@@ -79,6 +79,24 @@ const Combo combos[] = {
     {clue::paper, clue::photo, clue::w_mewa, GROUP_COUNT},
 };
 
+// A thought when the second clue of a pair arrives: plain in chapter 1,
+// vaguer later, none from chapter 4 on.
+struct Nudge {
+    clue::Id a, b;
+    txt::Id said;
+    int8_t last_chapter;
+};
+const Nudge nudges[] = {
+    {clue::bike, clue::nosand, think_bike, 3},
+    {clue::h_evening, clue::h_bike, think_saw, 3},
+    {clue::cap, clue::trail, think_cap, 3},
+    {clue::r_time, clue::k_time, think_lie, 3},
+    {clue::boots, clue::boatlight, think_boat, 3},
+    {clue::photo, clue::woman, think_kowal, 3},
+    {clue::aurora, clue::h_asked, think_waits, 3},
+    {clue::paper, clue::photo, think_mewa, 3},
+};
+
 // ------------------------------------------------------------ showing
 
 struct Show {
@@ -181,7 +199,25 @@ void grant_until(int ch) {
 }
 
 // Called after every new clue or flag: is the chapter finished?
-void after_clue(clue::Id) {
+// is there a pair in the notebook that is waiting to be combined?
+bool combo_waiting() {
+    for(const auto &k : combos)
+        if(has(k.a) && has(k.b) && !has(k.result)) return true;
+    return false;
+}
+
+void after_clue(clue::Id c) {
+    if(c != clue::COUNT) {
+        for(const auto &n : nudges) {
+            if(st.chapter > n.last_chapter) continue;
+            clue::Id other = n.a == c ? n.b : n.b == c ? n.a : clue::COUNT;
+            if(other == clue::COUNT || !has(other)) continue;
+            bool done = false;
+            for(const auto &k : combos)
+                if(((k.a == n.a && k.b == n.b) || (k.a == n.b && k.b == n.a)) && has(k.result)) done = true;
+            if(!done) { line(n.said); break; }
+        }
+    }
     switch(st.chapter) {
     case 1:
         if(!flag(F_CH1_DONE) && has(clue::lamp) && has(clue::log) && has(clue::bike) && flag(F_HALINA1)) {
@@ -621,7 +657,15 @@ bool board_submit(Board b, const uint8_t picks[3]) {
 
 // ================================================================ hints
 
+float hint_delay_s() {
+    // early on the player is still learning the notebook
+    static const float delay[] = {45.0f, 45.0f, 60.0f, 90.0f, 120.0f, 150.0f};
+    return delay[st.chapter < 0 ? 0 : st.chapter > 5 ? 5 : st.chapter];
+}
+
 Id hint() {
+    // in the first chapters, an open pair in the notebook comes first
+    if(st.chapter <= 2 && combo_waiting()) return hint_combine;
     switch(st.chapter) {
     case 0: return hint_prolog;
     case 1:

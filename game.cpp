@@ -203,7 +203,6 @@ void play_input() {
     if(buttons.pressed & Button::A) {
         int h = near_hotspot();
         if(h >= 0) {
-            st.idle_s = 0.0f;
             const Hotspot &hs = story::hotspot(h);
             if(hs.kind == HK_TALK) {
                 // stand beside the person, facing them, not on top of them
@@ -225,10 +224,13 @@ void play_input() {
         return;
     }
 
-    // a thought nudges a player who is stuck
+    // a thought nudges a player who is stuck: the clock counts time on the
+    // move since the last new clue or step in the story (pressing A on
+    // things already seen does not reset it), and early chapters help sooner
     st.idle_s += DT;
-    if(st.idle_s > 120.0f) {
+    if(st.idle_s > story::hint_delay_s()) {
         st.idle_s = 0.0f;
+        st.hint_level++;
         push(A_LINE, story::hint());
     }
 }
