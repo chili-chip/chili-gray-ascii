@@ -3,10 +3,13 @@
 // Stands in for the SDL/console firmware: a fake clock and an RGB565 frame
 // buffer like the VGC Zero's. No window and no sound.
 //
-//   gray-ascii-selftest              run the checks, exit 1 on a failure
-//   gray-ascii-selftest --clip DIR   play a scripted walk and write PPM frames
+//   gray-ascii-selftest              run the checks and play the whole game to
+//                                    all four endings; exit 1 on a failure
+//   gray-ascii-selftest --clip DIR   the same play, writing PPM frames of
+//                                    chosen moments (for GIFs)
 //   gray-ascii-selftest --bench      time render() on this machine
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -19,8 +22,7 @@
 #include "engine/api_private.hpp"
 #include "engine/api_version.h"
 #include "font.hpp"
-#include "game.hpp"
-#include "texts.hpp"
+#include "szary.hpp"
 #include "wind.hpp"
 
 using namespace blit;
@@ -48,12 +50,29 @@ bool host_set_mode(ScreenMode, SurfaceTemplate &t) {
     t.bounds = Size(128, 128);
     return true;
 }
-void *host_open(const std::string &, int) { return nullptr; }
-int32_t host_read(void *, uint32_t, uint32_t, char *) { return 0; }
-int32_t host_write(void *, uint32_t, uint32_t length, const char *) { return int32_t(length); }
-int32_t host_close(void *) { return 0; }
-uint32_t host_length(void *) { return 0; }
-bool host_exists(const std::string &) { return false; }
+// Files live in memory, so save slots work like on the console.
+struct Handle { std::string name; };
+void *host_open(const std::string &name, int mode) {
+    if(mode & OpenMode::write) files[name].clear();
+    else if(!files.count(name)) return nullptr;
+    return new Handle{name};
+}
+int32_t host_read(void *h, uint32_t offset, uint32_t length, char *out) {
+    auto &f = files[static_cast<Handle *>(h)->name];
+    if(offset >= f.size()) return 0;
+    uint32_t n = std::min<uint32_t>(length, uint32_t(f.size()) - offset);
+    memcpy(out, f.data() + offset, n);
+    return int32_t(n);
+}
+int32_t host_write(void *h, uint32_t offset, uint32_t length, const char *data) {
+    auto &f = files[static_cast<Handle *>(h)->name];
+    if(f.size() < offset + length) f.resize(offset + length);
+    memcpy(f.data() + offset, data, length);
+    return int32_t(length);
+}
+int32_t host_close(void *h) { delete static_cast<Handle *>(h); return 0; }
+uint32_t host_length(void *h) { return uint32_t(files[static_cast<Handle *>(h)->name].size()); }
+bool host_exists(const std::string &name) { return files.count(name) > 0; }
 bool host_dir_exists(const std::string &) { return true; }
 bool host_mkdir(const std::string &) { return true; }
 bool host_remove(const std::string &) { return false; }
@@ -95,20 +114,19 @@ const APIConst &api = host_api_const;
 APIData &api_data = host_api_data;
 }
 
+using namespace sz;
+
 namespace {
 
 int failures = 0;
 #define CHECK(cond, ...) do { if(!(cond)) { failures++; fprintf(stderr, "FAIL %s:%d: ", __FILE__, __LINE__); fprintf(stderr, __VA_ARGS__); fputc('\n', stderr); } } while(0)
 
-// One 10 ms step with these buttons held; `press` = newly pressed.
-void step(uint32_t held, uint32_t press = 0) {
-    clock_ms += 10;
-    buttons.state = held | press;
-    buttons.pressed = press;
-    buttons.released = 0;
-    ::update(clock_ms);
-    buttons.pressed = 0;
-}
+// ---------------------------------------------------------------- frames
+
+const char *clip_dir = nullptr;
+const char *shots_dir = nullptr;
+bool recording = false;
+int clip_frame = 0, clip_every = 4, clip_n = 0;
 
 void write_ppm(const char *path) {
     FILE *f = fopen(path, "wb");
@@ -129,32 +147,196 @@ bool frame_is_grey() {
     return true;
 }
 
-template <size_t N>
-void check_lines(const texts::Line (&lines)[N], const char *what) {
-    for(size_t i = 0; i < N; i++)
-        for(int l = 0; l < texts::LANGS; l++) {
-            const char *t = lines[i].text[l];
-            CHECK(font::has_all_glyphs(t), "%s line %zu lang %d has a character with no glyph: %s", what, i, l, t);
-            // 3 lines of 30 in the box, or 4 lines of 31 as a thought
-            int limit = lines[i].speaker[l] ? 3 * 30 : 4 * 31;
-            CHECK(font::length(t) <= limit, "%s line %zu lang %d is too long (%d > %d)", what, i, l, font::length(t), limit);
-            if(lines[i].speaker[l]) CHECK(font::has_all_glyphs(lines[i].speaker[l]), "%s speaker", what);
+int grey_frames = 0, frames_checked = 0;
+
+// One 10 ms step with these buttons held; `press` = newly pressed.
+void step(uint32_t held, uint32_t press = 0) {
+    clock_ms += 10;
+    buttons.state = held | press;
+    buttons.pressed = press;
+    buttons.released = 0;
+    ::update(clock_ms);
+    buttons.pressed = 0;
+    // render now and then: every scene must draw without trouble and grey
+    static int n = 0;
+    bool shoot = recording && clip_dir && (clip_n++ % clip_every) == 0;
+    if(shoot || (++n % 97) == 0) {
+        ::render(clock_ms);
+        frames_checked++;
+        grey_frames += frame_is_grey();
+        if(shoot) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/f%05d.ppm", clip_dir, clip_frame++);
+            write_ppm(path);
         }
+    }
 }
 
+void shot(const char *name) {
+    if(!shots_dir) return;
+    ::render(clock_ms);
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s.ppm", shots_dir, name);
+    write_ppm(path);
+}
+
+void wait(int steps, uint32_t held = 0) { for(int i = 0; i < steps; i++) step(held); }
+void press(uint32_t b) { step(0, b); step(0); }
+
+// Read every line: press A when the text has typed, until the script is
+// done and Szary can walk again.
+bool settle(int limit = 60000) {
+    for(int i = 0; i < limit; i++) {
+        if(mode() == M_PLAY && !script_busy()) return true;
+        if(mode() != M_PLAY) return mode() == M_CHOICE || mode() == M_ENDING;  // the player decides
+        bool typing = ui::dialog_typing();
+        if((ui::dialog_open() && !typing) || ui::card_open()) {
+            wait(recording ? 90 : 2);
+            step(0, Button::A);
+        } else {
+            step(0);
+        }
+    }
+    return false;
+}
+
+void walk_to(float x) {
+    for(int i = 0; i < 6000 && fabsf(st.x - x) > 2.0f; i++) {
+        settle();
+        step(st.x < x ? Button::DPAD_RIGHT : Button::DPAD_LEFT);
+    }
+    for(int i = 0; i < 40; i++) step(0);  // stop
+}
+
+void torch(bool on) {
+    if(st.torch != on) press(Button::Y);
+}
+
+// Walk to a hotspot and press A there.
+void use(float x, const char *what) {
+    walk_to(x);
+    int h = near_hotspot();
+    CHECK(h >= 0, "nothing to use at %s (x %.0f, scene %d)", what, double(st.x), int(st.scene));
+    press(Button::A);
+    CHECK(settle(), "stuck after %s", what);
+}
+
+int clue_row(clue::Id c) {
+    for(int i = 0; i < st.nclues; i++)
+        if(st.order[st.nclues - 1 - i] == c) return i;
+    return -1;
+}
+
+void down(int n) { for(int i = 0; i < n; i++) press(Button::DPAD_DOWN); }
+
+void combine(clue::Id a, clue::Id b, clue::Id expect) {
+    CHECK(has(a) && has(b), "combine: missing %s or %s", clue::name[a][1], clue::name[b][1]);
+    press(Button::X);
+    CHECK(mode() == M_NOTEBOOK, "X opens the notebook");
+    down(clue_row(a));
+    press(Button::Y);  // Y combines everywhere, also next to a person
+    int from = clue_row(a), to = clue_row(b);
+    for(int i = 0; i < abs(to - from); i++) press(to > from ? Button::DPAD_DOWN : Button::DPAD_UP);
+    press(Button::A);
+    CHECK(mode() == M_PLAY, "combining closes the notebook");
+    CHECK(settle(), "stuck after combining");
+    CHECK(has(expect), "%s + %s should give %s", clue::name[a][1], clue::name[b][1], clue::name[expect][1]);
+}
+
+void show(float x, clue::Id c, clue::Id expect) {
+    walk_to(x);
+    press(Button::X);
+    CHECK(mode() == M_NOTEBOOK, "X near a person opens the notebook to show");
+    down(clue_row(c));
+    press(Button::A);
+    CHECK(settle(), "stuck after showing");
+    if(expect != clue::COUNT) CHECK(has(expect), "showing %s should give %s", clue::name[c][1], clue::name[expect][1]);
+}
+
+void travel(Place p) {
+    press(Button::X);
+    press(Button::DPAD_LEFT);  // clues -> map
+    Place list[PL_COUNT];
+    int n = story::places(list);
+    int at = -1;
+    for(int i = 0; i < n; i++)
+        if(list[i] == p) at = i;
+    CHECK(at >= 0, "place %d is not on the map", int(p));
+    down(at);
+    press(Button::A);
+    CHECK(settle(), "stuck after travelling");
+}
+
+void board(Board b, std::initializer_list<int> picks, bool expect_right) {
+    press(Button::X);
+    press(Button::DPAD_RIGHT);
+    press(Button::DPAD_RIGHT);  // clues -> people -> questions
+    txt::Id q[8]; bool closed[8]; int8_t brd[8];
+    int n = story::questions(q, closed, brd);
+    int at = -1;
+    for(int i = 0; i < n; i++)
+        if(brd[i] == b) at = i;
+    CHECK(at >= 0, "no question opens board %d", int(b));
+    down(at);
+    press(Button::A);
+    CHECK(mode() == M_BOARD, "A on the question opens board %d", int(b));
+    for(int p : picks) {
+        for(int i = 0; i < p; i++) press(Button::DPAD_RIGHT);
+        press(Button::DPAD_DOWN);
+    }
+    press(Button::A);
+    if(story::board(b).final) {
+        press(Button::DPAD_UP);  // "not yet" -> "yes"
+        press(Button::A);
+    } else {
+        wait(200);
+        if(!expect_right) {
+            CHECK(mode() == M_BOARD, "a wrong board stays open to fix");
+            press(Button::B);
+        }
+    }
+    CHECK(mode() != M_BOARD, "board %d closes", int(b));
+    if(expect_right) CHECK(story::board_done(b), "board %d should be right", int(b));
+    for(int i = 0; i < 6000 && mode() == M_PLAY; i++) {
+        if(settle(1)) break;
+    }
+}
+
+// ---------------------------------------------------------------- texts
+
 void test_texts() {
-    check_lines(texts::intro, "intro");
-    check_lines(texts::trail_dark, "trail_dark");
-    check_lines(texts::trail_lit, "trail_lit");
-    check_lines(texts::halina, "halina");
-    for(int l = 0; l < texts::LANGS; l++) {
-        CHECK(font::length(texts::TITLE_HINT[l]) <= 32, "hint too long");
-        CHECK(font::has_all_glyphs(texts::TALK[l]) && font::has_all_glyphs(texts::LOOK[l]), "labels");
+    using namespace txt;
+    for(int i = 0; i < txt::COUNT; i++)
+        for(int l = 0; l < 2; l++) {
+            const char *s = text[i][l];
+            CHECK(font::has_all_glyphs(s), "text %d lang %d has a character with no glyph: %s", i, l, s);
+            switch(who[i]) {
+            case W_MYSL: CHECK(ui::wrap_lines(s, 31) <= 4, "thought too long: %s", s); break;
+            case W_NARR: CHECK(ui::wrap_lines(s, 28) <= 4, "card too long: %s", s); break;
+            case W_NONE: CHECK(ui::wrap_lines(s, 30) <= 3, "label too long: %s", s); break;
+            default: CHECK(ui::wrap_lines(s, 30) <= 3, "line does not fit the box (3x30): %s", s); break;
+            }
+        }
+    // stricter places
+    for(int l = 0; l < 2; l++) {
+        for(int i = word_kuba; i <= word_shame; i++) CHECK(font::length(text[i][l]) <= 26, "board word too long: %s", text[i][l]);
+        for(int i = q_light; i <= q_final; i++) CHECK(font::length(text[i][l]) <= 28, "question too long: %s", text[i][l]);
+        for(int i = board1_s1; i <= board3_s3; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 2, "board line too long: %s", text[i][l]);
+        for(int i = choice_final_q; i <= choice_page_b; i++) CHECK(ui::wrap_lines(text[i][l], 28) <= 2, "choice too long: %s", text[i][l]);
+        for(int i = hint_prolog; i <= hint_ch5; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        for(int i = place_dunes; i <= place_station; i++) CHECK(font::length(text[i][l]) <= 26, "place too long: %s", text[i][l]);
+        for(int i = 0; i < clue::COUNT; i++) {
+            CHECK(font::has_all_glyphs(clue::name[i][l]) && font::has_all_glyphs(clue::note[i][l]), "clue %d glyphs", i);
+            CHECK(font::length(clue::name[i][l]) <= 20, "clue name too long: %s", clue::name[i][l]);
+            CHECK(ui::wrap_lines(clue::note[i][l], 31) <= 4, "clue note too long: %s", clue::note[i][l]);
+        }
     }
     CHECK(font::length("ŻÓŁĆ") == 4, "UTF-8 length");
     CHECK(font::glyph_index(0x142) == font::glyph_index(0x141), "ł maps to Ł");
     CHECK(font::glyph_index(0x20AC) < 0, "no glyph for the euro sign");
 }
+
+// ---------------------------------------------------------------- wind
 
 void test_wind() {
     wind::Field f;
@@ -164,7 +346,7 @@ void test_wind() {
     pressed_b.pressed = true;
     float min_w = 9, max_w = -9, sum_free = 0, sum_pressed = 0;
     int n = 0;
-    for(int i = 0; i < 6000; i++) {  // a minute
+    for(int i = 0; i < 6000; i++) {
         f.step(0.01f, -100, 400);
         float w = f.at(100);
         min_w = fminf(min_w, w);
@@ -181,99 +363,294 @@ void test_wind() {
     CHECK(wind::stem_char(0) == '|' && wind::stem_char(3) == '/' && wind::stem_char(-3) == '\\', "stem characters");
 }
 
-void test_game() {
+// ---------------------------------------------------------------- play
+
+// Title to the start of chapter 5, the way a player would.
+void play_to_chapter5() {
     ::init();
-    // intro thought is open; it types, then A closes it
-    CHECK(dbg::dialog_open(), "intro opens");
-    for(int i = 0; i < 400; i++) step(0);
-    CHECK(!dbg::dialog_typing(), "intro finished typing");
-    step(0, Button::A);
-    CHECK(!dbg::dialog_open(), "A closes the intro");
+    CHECK(mode() == M_TITLE, "starts on the title");
+    CHECK(!has_save(), "no save on a fresh console");
+    recording = true;
+    wait(300);
+    shot("01-title");
+    press(Button::A);  // NEW GAME
+    CHECK(mode() == M_PLAY, "new game starts");
+    CHECK(settle(), "prologue card and first thought");
+    recording = false;
+    CHECK(st.scene == S_STATION && st.chapter == 0, "prologue at the station");
+    shot("02-station");
 
-    // walking
-    float x0 = dbg::player_x();
-    for(int i = 0; i < 100; i++) step(Button::DPAD_RIGHT);
-    CHECK(dbg::player_x() > x0 + 20, "walks right");
+    // prologue: the door does nothing before the telex
+    use(114, "door");
+    CHECK(st.chapter == 0, "the telex first");
+    recording = true;
+    use(78, "telex");
+    recording = false;
+    CHECK(flag(F_TELEX), "telex read");
+    use(114, "door");
+    CHECK(st.chapter == 1 && st.scene == S_DUNES, "chapter 1 on the dunes");
 
-    // the trail: dark first, then with the torch
-    while(dbg::player_x() < 292) step(Button::DPAD_RIGHT);
-    for(int i = 0; i < 60; i++) step(0);
-    step(0, Button::A);
-    CHECK(dbg::dialog_open(), "look at the trail");
-    for(int i = 0; i < 6 && dbg::dialog_open(); i++) { step(0, Button::A); step(0, Button::A); }
-    CHECK(!dbg::dialog_open(), "trail thought closes");
-    step(0, Button::Y);
-    CHECK(dbg::torch_on(), "Y lights the torch");
-
-    // a frame with the torch is grey only
+    // chapter 1
+    recording = true;
+    torch(true);
+    walk_to(150);
+    recording = false;
+    use(150, "lighthouse door");
+    CHECK(st.scene == S_LIGHTHOUSE && has(clue::door), "inside the lighthouse");
+    use(32, "log");
+    shot("03-lighthouse-inside");
+    use(58, "cap");
+    use(78, "lens");
+    use(106, "switch");
+    CHECK(has(clue::lamp) && has(clue::fuse_gone), "the fuse is gone");
+    use(10, "lighthouse exit");
+    CHECK(st.scene == S_DUNES, "back on the dunes");
+    use(176, "bike");
+    torch(false);
+    use(272, "trail in the dark");
+    CHECK(!has(clue::trail), "no trail without the torch");
+    torch(true);
+    recording = true;
+    use(272, "trail");
+    recording = false;
+    CHECK(has(clue::trail), "the torch shows the trail");
+    walk_to(290);
+    wait(100);
+    shot("04-trail-torch");
+    use(334, "trail end");
+    recording = true;
+    use(494, "Halina");
+    recording = false;
+    CHECK(flag(F_CH1_DONE), "chapter 1 done");
+    use(518, "barrel");
+    walk_to(470);
+    wait(60);
+    shot("05-halina-fire");
+    CHECK(has(clue::barrel), "the barrel was dragged");
+    combine(clue::bike, clue::nosand, clue::w_rider);
+    combine(clue::h_evening, clue::h_bike, clue::w_saw);
+    combine(clue::cap, clue::trail, clue::w_led);
+    press(Button::X);
+    shot("06-notebook-clues");
+    press(Button::DPAD_RIGHT);
+    press(Button::DPAD_RIGHT);
+    shot("07-notebook-questions");
+    press(Button::DPAD_RIGHT);
+    shot("08-notebook-map");
+    press(Button::B);
+    show(494, clue::w_saw, clue::h_930);
+    // the language can change any time
+    press(Button::MENU);
+    CHECK(mode() == M_MENU, "MENU pauses");
+    down(1);
+    press(Button::A);
+    CHECK(st.lang == EN, "the menu switches to English");
     ::render(clock_ms);
-    CHECK(frame_is_grey(), "the picture has only greys");
+    press(Button::A);
+    CHECK(st.lang == PL, "and back");
+    press(Button::MENU);
+    CHECK(mode() == M_PLAY, "MENU resumes");
 
-    // language
-    step(0, Button::X);
-    CHECK(dbg::lang() == texts::EN, "X switches to English");
-    step(0, Button::X);
+    // chapter 2
+    travel(PL_BAR);
+    CHECK(st.chapter == 2 && st.scene == S_BAR, "chapter 2 in the bar");
+    recording = true;
+    use(30, "Rysiek");
+    recording = false;
+    use(108, "Kuba");
+    use(126, "boots");
+    use(150, "window");
+    use(82, "photo");
+    use(56, "radio");
+    walk_to(70);
+    wait(60);
+    shot("09-bar");
+    show(108, clue::r_time, clue::k_time);
+    show(108, clue::log, clue::woman);
+    combine(clue::r_time, clue::k_time, clue::w_lie);
+    combine(clue::boots, clue::boatlight, clue::w_kboat);
+    board(B_LIE, {0, 0}, false);
+    CHECK(!story::board_done(B_LIE), "a wrong board stays open");
+    board(B_LIE, {1, 1}, true);
+    CHECK(flag(F_CH2_DONE) && has(clue::smuggle), "Rysiek confesses");
 
-    // Halina
-    while(dbg::player_x() < 470) step(Button::DPAD_RIGHT);
-    for(int i = 0; i < 60; i++) step(0);
-    step(0, Button::A);
-    CHECK(dbg::dialog_open(), "talk to Halina");
-    int presses = 0;
-    while(dbg::dialog_open() && presses < 20) { step(0, Button::A); presses++; }
-    CHECK(!dbg::dialog_open(), "the talk ends");
-    // cannot walk while talking
-    step(0, Button::A);
-    float xh = dbg::player_x();
-    for(int i = 0; i < 50; i++) step(Button::DPAD_RIGHT);
-    CHECK(fabsf(dbg::player_x() - xh) < 0.5f, "no walking while the box is open");
+    // chapter 3
+    travel(PL_PIER);
+    CHECK(st.chapter == 3 && st.scene == S_PIER, "chapter 3 on the pier");
+    recording = true;
+    use(292, "boat");
+    recording = false;
+    use(404, "pier end");
+    walk_to(300);
+    wait(60);
+    shot("10-pier-rain");
+    use(40, "office door");
+    CHECK(st.scene == S_OFFICE, "in the harbour office");
+    use(44, "Jasinski");
+    use(70, "timetable");
+    use(94, "chart");
+    use(116, "archive");
+    walk_to(60);
+    shot("11-office");
+    CHECK(flag(F_CH3_DONE) && has(clue::report), "chapter 3 done");
+    show(44, clue::paper, clue::captain);
+    combine(clue::aurora, clue::h_asked, clue::w_waits);
+    combine(clue::paper, clue::photo, clue::w_mewa);
+    combine(clue::photo, clue::woman, clue::w_kowal);
+
+    // chapter 4
+    travel(PL_DUNES);
+    CHECK(st.chapter == 4 && st.scene == S_DUNES, "chapter 4: the storm");
+    torch(true);
+    recording = true;
+    use(392, "tuft 1");
+    recording = false;
+    use(450, "tuft 2");
+    wait(60);
+    shot("12-storm-trail");
+    use(604, "tuft 3");
+    CHECK(flag(F_TRAIL4), "the trail leads to the bunker");
+    use(662, "bunker");
+    CHECK(has(clue::padlock) && !flag(F_BUNKER_OPEN), "padlocked");
+    use(662, "bunker without crowbar");
+    use(44, "car");
+    CHECK(has(clue::crowbar), "crowbar from the car");
+    use(662, "bunker with crowbar");
+    CHECK(st.scene == S_BUNKER, "inside the bunker");
+    recording = true;
+    use(56, "Bogdan");
+    recording = false;
+    use(74, "pocket");
+    shot("13-bunker");
+    use(104, "shelf");
+    CHECK(has(clue::b_fire) && has(clue::page) && has(clue::fuse), "bunker clues");
+    if(shots_dir) {
+        press(Button::X); press(Button::DPAD_RIGHT); press(Button::DPAD_RIGHT); press(Button::A);
+        press(Button::DPAD_RIGHT); press(Button::DPAD_RIGHT);
+        shot("14-board");
+        press(Button::B);
+    }
+    board(B_FIRE, {2, 1, 2}, true);
+    CHECK(st.chapter == 5 && st.scene == S_DUNES, "chapter 5 at dawn");
+    CHECK(has_save(), "the game saved itself");
+    wait(3000);
+    shot("15-dawn-aurora");
+}
+
+void continue_game() {
+    back_to_title();
+    wait(50);
+    CHECK(mode() == M_TITLE, "on the title");
+    press(Button::A);  // CONTINUE is first when there is a save
+    CHECK(mode() == M_PLAY && st.chapter == 5, "continue loads chapter 5");
+    CHECK(settle(), "continue settles");
+}
+
+void finish(Ending e) {
+    CHECK(mode() == M_ENDING, "an ending plays (%d)", int(e));
+    CHECK(st.endings & (1u << e), "ending %d recorded", int(e));
+    for(int i = 0; i < 3000 && mode() == M_ENDING; i++) {
+        wait(recording ? 120 : 30);
+        step(0, Button::A);
+    }
+    CHECK(mode() == M_TITLE, "ending returns to the title");
+}
+
+void test_play() {
+    play_to_chapter5();
+
+    // talking to Halina before the last board does not end the game
+    use(494, "Halina too early");
+    CHECK(mode() == M_PLAY, "the board comes first");
+
+    // 1. the wrong accusation: the Sandbank
+    board(B_FINAL, {0, 0, 0}, false);
+    finish(E_BANK);
+
+    // 2. the right board, then sit by the fire: Wind
+    continue_game();
+    CHECK(!flag(F_BOARD3), "a lost ending was not saved over the game");
+    board(B_FINAL, {2, 2, 2}, true);
+    CHECK(flag(F_ACCUSE_OK), "Halina named");
+    txt::Id q[8]; bool closed[8]; int8_t b[8];
+    int n = story::questions(q, closed, b);
+    for(int i = 0; i < n; i++) CHECK(closed[i], "question %d still open at the end", i);
+    use(494, "Halina final");
+    CHECK(mode() == M_CHOICE, "the last choice");
+    press(Button::DPAD_DOWN);
+    press(Button::A);
+    settle(100);
+    finish(E_WIND);
+
+    // 3. relight, the page to the report: Dawn
+    continue_game();
+    CHECK(flag(F_BOARD3), "the right board was saved");
+    recording = true;
+    use(494, "Halina final");
+    press(Button::A);  // relight
+    for(int i = 0; i < 6000 && mode() == M_PLAY; i++) settle(1);
+    CHECK(flag(F_RELIT) && world::beam > 0.0f, "the lighthouse burns");
+    shot("16-beam");
+    {
+        // the beam sweeps the sky: bright pixels above the dunes over a few seconds
+        int bright = 0;
+        for(int k = 0; k < 10; k++) {
+            wait(50);
+            ::render(clock_ms);
+            for(int y = 45; y < 70; y++)
+                for(int x = 0; x < 128; x++) bright += ((framebuffer[y * 128 + x] >> 5) & 63) > 40;
+        }
+        CHECK(bright > 200, "the lighthouse beam lights the sky (%d)", bright);
+    }
+    CHECK(mode() == M_CHOICE, "the page");
+    wait(120);
+    press(Button::A);
+    finish(E_DAWN);
+    recording = false;
+
+    // 4. relight, the page in the fire: Ash
+    continue_game();
+    use(494, "Halina final");
+    press(Button::A);
+    for(int i = 0; i < 6000 && mode() == M_PLAY; i++) settle(1);
+    press(Button::DPAD_DOWN);
+    press(Button::A);
+    finish(E_ASH);
+    CHECK(st.endings == 15, "all four endings seen");
+
+    // chapter select after the endings
+    wait(20);
+    press(Button::DPAD_DOWN);
+    press(Button::DPAD_DOWN);  // continue, new game, chapters
+    press(Button::A);
+    for(int i = 0; i < 3; i++) press(Button::DPAD_RIGHT);
+    press(Button::A);
+    CHECK(settle(), "chapter select settles");
+    CHECK(st.chapter == 4 && st.scene == S_DUNES && has(clue::report), "chapter 4 from the title with its clues");
+
+    // a stuck player hears a hint
+    CHECK(!ui::dialog_open(), "quiet");
+    wait(12100);
+    CHECK(ui::dialog_open(), "a hint after two idle minutes");
+    settle();
 
     // a long stall (system menu) does not run hundreds of steps
     clock_ms += 60000;
     ::update(clock_ms);
-}
 
-// Scripted walk for the website GIF and the plan: intro, torch, trail, Halina.
-void clip(const char *dir, int every) {
-    ::init();
-    int frame = 0, n = 0;
-    auto shoot = [&]() {
-        if(n++ % every) return;
-        ::render(clock_ms);
-        char path[512];
-        snprintf(path, sizeof(path), "%s/f%05d.ppm", dir, frame++);
-        write_ppm(path);
-    };
-    auto wait = [&](int steps, uint32_t held = 0) { for(int i = 0; i < steps; i++) { step(held); shoot(); } };
-    auto press = [&](uint32_t b) { step(0, b); shoot(); };
-
-    wait(330);              // intro types
-    press(Button::A);
-    wait(60);
-    press(Button::Y);       // torch
-    wait(40);
-    while(dbg::player_x() < 200) { step(Button::DPAD_RIGHT); shoot(); }
-    wait(90);               // stand in the wind
-    while(dbg::player_x() < 292) { step(Button::DPAD_RIGHT); shoot(); }
-    wait(80);
-    press(Button::A);       // look at the grass
-    wait(260);
-    press(Button::A);
-    wait(220);
-    press(Button::A);
-    wait(40);
-    while(dbg::player_x() < 470) { step(Button::DPAD_RIGHT); shoot(); }
-    wait(80);
-    press(Button::A);       // talk
-    for(int k = 0; k < 4; k++) { wait(k == 2 ? 300 : 230); press(Button::A); }
-    wait(120);
-    printf("%d frames\n", frame);
+    CHECK(frames_checked > 50 && grey_frames == frames_checked, "every frame is grey (%d of %d)", grey_frames,
+          frames_checked);
 }
 
 void bench() {
     ::init();
-    step(0, Button::A);
-    step(0, Button::Y);
+    press(Button::A);
+    settle();
+    story::grant_until(4);
+    clear_script();
+    story::start_chapter(4, false);
+    settle();
+    torch(true);
     double total_us = 0, worst_us = 0;
     int frames = 0;
     for(int i = 0; i < 4000; i++) {
@@ -286,23 +663,26 @@ void bench() {
         if(us > worst_us) worst_us = us;
         frames++;
     }
-    printf("render on this machine: %.0f us average, %.0f us worst, %d frames\n", total_us / frames, worst_us, frames);
+    printf("render on this machine (storm, torch): %.0f us average, %.0f us worst, %d frames\n", total_us / frames,
+           worst_us, frames);
 }
 
 }  // namespace
 
 int main(int argc, char **argv) {
-    if(argc >= 3 && !strcmp(argv[1], "--clip")) {
-        clip(argv[2], argc >= 4 ? atoi(argv[3]) : 4);
-        return 0;
-    }
     if(argc >= 2 && !strcmp(argv[1], "--bench")) {
         bench();
         return 0;
     }
+    if(argc >= 3 && !strcmp(argv[1], "--shots")) shots_dir = argv[2];
+    if(argc >= 3 && !strcmp(argv[1], "--clip")) {
+        clip_dir = argv[2];
+        if(argc >= 4) clip_every = atoi(argv[3]);
+    }
     test_texts();
     test_wind();
-    test_game();
+    test_play();
+    if(clip_dir) printf("%d frames\n", clip_frame);
     if(failures) {
         printf("%d check(s) failed\n", failures);
         return 1;

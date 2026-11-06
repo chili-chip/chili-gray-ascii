@@ -2,35 +2,41 @@
 
 A short noir detective story for the ChiliChip **VGC Zero** (RP2350, 128x128), drawn only with ASCII characters in shades of grey. Built on the [chili-chip fork of the 32blit SDK](https://github.com/chili-chip/32blit-sdk); it also runs on desktop (SDL) and in the browser.
 
-**Status: technical test (M0).** One night scene, not a game yet. It answers two questions before we build the story: does ASCII grass in the wind look good on a 128x128 screen, and is it fast enough on the console?
+**Status: the whole story is playable (v0.2.0).** Five chapters, four endings, Polish and English. The frame rate on a real console is not measured yet.
 
-![Szary, technical test](docs/szary-m0.gif)
+![Szary on the dunes](docs/szary.gif)
 
-## The idea
+## The story (no spoilers)
 
-Wydma, a small Baltic seaside town in November, off-season. The lighthouse went dark at 22:40 and the keeper is gone. Detective Szary has one night. Five short chapters (about an hour in all): walk the beach, the pier, the dunes and the old bunker, look at things with the torch, talk to people, then put the answer together on a deduction board. Polish and English.
+Wydma, a small Baltic seaside town in November, off-season. The lighthouse went dark at 22:40 and the keeper is gone. Detective Szary has one night: the dunes, the lighthouse, the Gull Bar, the harbour and an old bunker. About an hour to play. The weather gets worse every chapter, from a breeze to a storm, and then dawn.
 
-The wind is part of the case: grass that lies **against** the wind was stepped on, so it shows where someone walked.
+The wind is part of the case: grass that lies **against** the wind was stepped on, so it shows where someone walked. You need the torch to see it.
 
-## What the test shows
+## How it plays
 
-- Dunes at night: stars, a moon of dots, clouds and a dark lighthouse far away, the sea, two layers of dunes and grass in front of the detective.
-- Grass in tufts. Every blade is a small spring pushed by the wind at its own place, and gusts travel across the dunes, so you see a wave go through the grass.
-- The torch lights the grass, the sand and the dust in its beam. The fire in Halina's barrel lights her and leans with the wind.
-- A trail of flattened grass to look at (clue), and a short talk with Halina.
-- A dialog box drawn with ASCII, typed out letter by letter, with Polish letters.
+- **Walk and look.** Stand at something and press A: look, talk, go in or out.
+- **The notebook (X).** Szary writes down every clue himself, in his own words (you never type). Four tabs:
+  - **CLUES**: pick one clue with A, then a second one: if they fit, you get a conclusion.
+  - **PEOPLE**: who you met and what you know about them.
+  - **QUESTIONS**: what is still open, and Szary's thought about the next step.
+  - **MAP**: go to any place you know. A new place starts the next chapter.
+- **Showing.** Press X next to a person and A on a clue to show it. Some people change their story. Y combines clues there.
+- **Boards.** Sentences with gaps; you choose the words with left/right. The first two boards tell you if you are right. **The last one does not**: you decide, and you live with it.
+- **Endings.** Four: Dawn, Ash, Wind and Sandbank. After the first one, the title screen lets you start any chapter.
+- **Saving.** The game saves itself when a chapter starts and after new clues. CONTINUE on the title screen.
+- **Hints.** If you are stuck for two minutes, Szary thinks aloud about what to do next.
 
 ## Controls
 
 | Button | Action |
 |---|---|
-| D-pad left / right | Walk |
+| D-pad left / right | Walk (hold B to walk faster) |
 | A | Look / talk / next line |
 | Y | Torch on or off |
-| X | Polish / English |
-| B | Show the frame rate and how long a frame takes to draw (for testing on the console) |
+| X | Notebook (next to a person: show a clue) |
+| MENU | Pause: language, text speed, frame-rate counter, main menu |
 
-On a PC: arrow keys, `Z` = A, `X` = B, `C` = X, `V` = Y.
+On a PC: arrow keys, `Z` = A, `X` = B, `C` = X, `V` = Y, `Esc` or `2` = MENU.
 
 ## How it draws
 
@@ -39,7 +45,24 @@ On a PC: arrow keys, `Z` = A, `X` = B, `C` = X, `V` = Y.
 - Characters are placed on any pixel, not on a grid, so movement is smooth (one pixel at a time).
 - Eight greys, 0 = black (the OLED pixel is off).
 - Glyphs are drawn as horizontal spans straight into the screen with the surface's blend function, not pixel by pixel.
-- `wind.hpp` has the wind field and the grass springs with no drawing, so the self-test can run them.
+- Light: the torch is a cone in front of Szary; lamps, the fire and the relit lighthouse add light around them.
+
+## Code
+
+| File | What |
+|---|---|
+| `szary.hpp` | Shared state and the interfaces between the files |
+| `game.cpp` | The loop: modes, input, the script queue, save slots |
+| `story.cpp` | What happens: places to look at, clues, combining, showing, boards, chapters, endings, hints |
+| `world.cpp` | Drawing the places, the people, weather, rain, the beam |
+| `ui.cpp` | Dialog box, thoughts, cards, notebook, boards, choices, menu, title, endings |
+| `audio.cpp` | Wind, rain and sea as filtered noise, clicks, the telex, a short tune |
+| `font.cpp`, `wind.hpp` | The glyphs; the wind field and the grass springs |
+| `story/teksty.csv` | Every line of the game, PL and EN (`id;who;pl;en`) |
+| `story/tropy.csv` | Clue names and notes, PL and EN |
+| `tools/gen_texts.py` | Turns the CSV files into C++ at build time |
+
+To change a line of text, edit `story/teksty.csv` and rebuild. The self-test then checks that it has every letter in the font and still fits its box.
 
 ## Build
 
@@ -47,7 +70,7 @@ The SDK is expected next to this folder (`../32blit-sdk`) or in `PATH_32BLIT_SDK
 
 ```bash
 # desktop (Linux: libsdl2-dev libsdl2-image-dev libsdl2-net-dev; pip install 32blit "bitstring<5")
-cmake -B build -D32BLIT_DIR=../32blit-sdk
+cmake -B build -D32BLIT_DIR=../32blit-sdk   # needs Python 3 for the texts
 cmake --build build
 ./build/chili-gray-ascii.elf
 
@@ -65,18 +88,26 @@ cmake --build build-vgc
 cmake -B build-test -D32BLIT_DIR=../32blit-sdk -DGRAY_SELFTEST=ON
 cmake --build build-test --target gray-ascii-selftest
 ./build-test/gray-ascii-selftest               # checks, exits 1 on a failure
-./build-test/gray-ascii-selftest --clip DIR 4  # scripted walk, one PPM every 4 updates (25 fps)
+./build-test/gray-ascii-selftest --clip DIR 4  # the same play, one PPM every 4 updates (25 fps) of chosen moments
 ./build-test/gray-ascii-selftest --bench       # render time on this machine
 ```
 
-It checks that every text has a glyph for every character and fits the box, that the wind never blows backwards and brings gusts, that free grass leans with the wind and pressed grass against it, that the picture has only greys, and a walk through the scene (intro, trail, torch, language, talk, no walking during a talk, a long stall).
+It checks:
+
+- every line and clue in both languages has a glyph for every character and fits its box, card, board or notebook row;
+- the wind never blows backwards and brings gusts; free grass leans with the wind and pressed grass against it;
+- **a full play from the title to all four endings**, pressing buttons like a player: every chapter, every clue, combining, showing, travelling by the map, a wrong and a right board, the language menu, CONTINUE from the save, the chapter select after the endings, the idle hint, and that every question in the notebook is closed by the end;
+- every frame drawn on the way has only greys, and the lighthouse beam lights the sky.
+
+`--shots DIR` saves one named screenshot of each place.
 
 Make the GIF from a clip: `ffmpeg -framerate 25 -i DIR/f%05d.ppm -vf "scale=384:384:flags=neighbor" szary.gif`.
 
 ## Next
 
-1. Measure the frame rate on a console (B shows it). The goal is a steady 30 fps or more.
-2. If it is fast enough: chapter 1 in full (M1). If not: a faster glyph blitter in RAM.
+1. Measure the frame rate on a console (MENU, then FPS counter). The goal is a steady 30 fps or more.
+2. Two or three people play it through: is it clear, is it too long, does the ending land?
+3. A game page on chilichip.eu/games.
 
 ## Licence
 
