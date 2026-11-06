@@ -218,6 +218,12 @@ void after_clue(clue::Id c) {
             if(!done) { line(n.said); break; }
         }
     }
+    // showing is the least obvious thing in the game: the first time it is
+    // needed, Szary says so
+    if(st.chapter == 2 && !flag(F_SHOW_THOUGHT) && has(clue::r_time) && flag(F_KUBA1) && !has(clue::k_time)) {
+        set_flag(F_SHOW_THOUGHT);
+        line(think_show);
+    }
     switch(st.chapter) {
     case 1:
         if(!flag(F_CH1_DONE) && has(clue::lamp) && has(clue::log) && has(clue::bike) && flag(F_HALINA1)) {
@@ -675,6 +681,7 @@ Id hint() {
         if(!flag(F_HALINA1)) return hint_ch1c;
         return hint_ch1d;
     case 2:
+        if(has(clue::r_time) && flag(F_KUBA1) && !has(clue::k_time)) return hint_ch2b;
         if(!(flag(F_RYSIEK1) && flag(F_KUBA1) && has(clue::boots))) return hint_ch2a;
         if(!has(clue::w_lie)) return hint_ch2b;
         return hint_ch2c;

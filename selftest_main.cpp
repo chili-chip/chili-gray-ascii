@@ -488,6 +488,8 @@ void play_to_chapter5() {
     use(30, "Rysiek");
     recording = false;
     use(108, "Kuba");
+    CHECK(ui::line_said(txt::think_show) && flag(F_SHOW_THOUGHT), "Szary says to show Rysiek's words to Kuba");
+    CHECK(story::hint() == txt::hint_ch2b, "the hint says the same until it is done");
     use(126, "boots");
     use(150, "window");
     use(82, "photo");
