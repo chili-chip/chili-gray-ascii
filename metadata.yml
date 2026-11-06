@@ -1,10 +1,10 @@
 title: Szary
-description: A short grey ASCII noir on the windy dunes (technical test)
+description: A short grey ASCII noir on the windy Baltic dunes. Five chapters, four endings, PL and EN.
 author: chili-chip
 splash:
   file: assets/splash.png
 icon:
   file: assets/icon.png
-version: v0.1.0
+version: v0.2.0
 category: game # game, demo, utility, ...
 url: https://github.com/chili-chip/chili-gray-ascii

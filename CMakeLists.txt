@@ -2,7 +2,18 @@ cmake_minimum_required(VERSION 3.15...3.31)
 
 project(chili-gray-ascii LANGUAGES C CXX ASM)
 
-set(PROJECT_SOURCE game.cpp game.hpp font.cpp font.hpp wind.hpp texts.hpp)
+# story/*.csv -> texts_gen.hpp/.cpp (all words of the game, PL and EN)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/gen)
+add_custom_command(
+  OUTPUT ${GEN_DIR}/texts_gen.hpp ${GEN_DIR}/texts_gen.cpp
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_texts.py ${CMAKE_CURRENT_SOURCE_DIR}/story ${GEN_DIR}
+  DEPENDS tools/gen_texts.py story/teksty.csv story/tropy.csv
+  COMMENT "Generating texts from story/*.csv")
+include_directories(${GEN_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+
+set(GAME_SOURCE story.cpp world.cpp ui.cpp audio.cpp font.cpp ${GEN_DIR}/texts_gen.cpp)
+set(PROJECT_SOURCE game.cpp ${GAME_SOURCE} szary.hpp font.hpp wind.hpp ${GEN_DIR}/texts_gen.hpp)
 set(PROJECT_DISTRIBS LICENSE README.md)
 
 if(MSVC)
@@ -27,7 +38,7 @@ add_custom_target (flash DEPENDS ${PROJECT_NAME}.flash)
 # Headless self-test and clip recorder (see README). Desktop only.
 option(GRAY_SELFTEST "Build gray-ascii-selftest, the headless test and clip recorder" OFF)
 if(GRAY_SELFTEST AND NOT CMAKE_CROSSCOMPILING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  add_executable(gray-ascii-selftest selftest_main.cpp game.cpp font.cpp)
+  add_executable(gray-ascii-selftest selftest_main.cpp game.cpp ${GAME_SOURCE})
   if(NOT MSVC)
     target_compile_options(gray-ascii-selftest PRIVATE -Wno-double-promotion)
   endif()
