@@ -324,6 +324,10 @@ void test_texts() {
         for(int i = board1_s1; i <= board3_s3; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 2, "board line too long: %s", text[i][l]);
         for(int i = choice_final_q; i <= choice_page_b; i++) CHECK(ui::wrap_lines(text[i][l], 28) <= 2, "choice too long: %s", text[i][l]);
         for(int i = hint_prolog; i <= hint_ch5b; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        // the log must not say K. is a woman: Kuba is the one who notices
+        for(const char *s : {text[lh_log_1][l], clue::note[clue::log][l]})
+            for(const char *w : {"PRZYSZŁA", "PRZYNIOSŁA", "HER ", "SHE "})
+                CHECK(!strstr(s, w), "the log gives away K.: %s", s);
         // the notebook must not name people Szary has not met yet
         for(int i = hint_prolog; i <= hint_ch1c; i++)
             for(const char *w : {"HALIN", "KOBIET", "WOMAN", "KUBA"})
