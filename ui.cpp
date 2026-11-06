@@ -230,8 +230,10 @@ int wrap_lines(std::string_view s, int cols) { return wrap(s, cols).count; }
 // ================================================================ dialog
 
 void say(txt::Group g) { dlg_start(txt::groups[g].first, txt::groups[g].count); }
-void say_line(txt::Id id) { dlg_start(id, 1); }
+txt::Id last_line_said = txt::COUNT;
+void say_line(txt::Id id) { last_line_said = id; dlg_start(id, 1); }
 bool dialog_open() { return dlg_on; }
+bool line_said(txt::Id id) { return last_line_said == id; }
 bool dialog_typing() { return dlg_on && dlg_shown < float(dlg_len()); }
 
 void dialog_press() {
@@ -472,6 +474,8 @@ void notebook_draw() {
         case T_CLUES: {
             clue::Id c = clue_at(i);
             label = clue::name[c][st.lang];
+            // spent clues stay in the notebook, written in a fainter grey
+            if(story::clue_spent(c)) shade = on ? 5 : 2;
             if(c >= clue::w_rider) { font::ch(8, y, '*', on ? 6 : 3); }
             if(i == first_pick) mark = '+';
             if(on) detail = clue::note[c][st.lang];

@@ -2,7 +2,7 @@
 
 A short noir detective story for the ChiliChip **VGC Zero** (RP2350, 128x128), drawn only with ASCII characters in shades of grey. Built on the [chili-chip fork of the 32blit SDK](https://github.com/chili-chip/32blit-sdk); it also runs on desktop (SDL) and in the browser.
 
-**Status: the whole story is playable (v0.2.0).** Five chapters, four endings, Polish and English. The frame rate on a real console is not measured yet.
+**Status: the whole story is playable (v0.2.1).** Five chapters, four endings, Polish and English. The frame rate on a real console is not measured yet.
 
 ![Szary on the dunes](docs/szary.gif)
 
@@ -24,7 +24,7 @@ The wind is part of the case: grass that lies **against** the wind was stepped o
 - **Boards.** Sentences with gaps; you choose the words with left/right. The first two boards tell you if you are right. **The last one does not**: you decide, and you live with it.
 - **Endings.** Four: Dawn, Ash, Wind and Sandbank. After the first one, the title screen lets you start any chapter.
 - **Saving.** The game saves itself when a chapter starts and after new clues. CONTINUE on the title screen.
-- **Hints.** If you are stuck for two minutes, Szary thinks aloud about what to do next.
+- **Hints.** When you find the second clue of a pair, Szary thinks aloud that they belong together (plainly in chapter 1, vaguer in chapters 2 and 3, not at all later). If you find nothing new for a while (45 s in chapter 1, up to 150 s in chapter 5; looking again at things you have seen does not count), he says what to do next. In chapters 1 and 2 an open pair in the notebook comes first. The notebook's Questions tab always shows the same next step.
 
 ## Controls
 

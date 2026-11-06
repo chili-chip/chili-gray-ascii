@@ -31,7 +31,7 @@ enum Flag : uint8_t {
     F_CH2_STARTED, F_RYSIEK1, F_KUBA1, F_PHOTO, F_BOARD1, F_CH2_DONE,
     F_CH3_STARTED, F_JAS1, F_ARCHIVE, F_CH3_DONE,
     F_CH4_STARTED, F_TRAIL2, F_TRAIL3, F_TRAIL4, F_BUNKER_OPEN, F_BOGDAN1, F_FIRE_THOUGHT, F_BOARD2, F_CH4_DONE,
-    F_CH5_STARTED, F_BOARD3, F_ACCUSE_OK, F_RELIT, F_LEGEND_EARLY, F_WINDOW, F_RADIO_BAR,
+    F_CH5_STARTED, F_BOARD3, F_ACCUSE_OK, F_RELIT, F_LEGEND_EARLY, F_WINDOW, F_RADIO_BAR, F_SHOW_THOUGHT,
     F_COUNT
 };
 static_assert(F_COUNT <= 64, "flags live in a uint64_t");
@@ -137,6 +137,7 @@ void after_clue(clue::Id c);  // checks chapter progress
 
 // Notebook
 bool met(Person p);
+bool clue_spent(clue::Id c);  // every combination and useful show with it is done
 int person_lines(Person p, txt::Id out[3]);
 int questions(txt::Id out[8], bool closed[8], int8_t board[8]);
 int places(Place out[PL_COUNT]);
@@ -159,6 +160,7 @@ bool board_done(Board b);
 bool board_submit(Board b, const uint8_t picks[3]);
 
 txt::Id hint();
+float hint_delay_s();  // seconds without progress before a hint
 }  // namespace story
 
 // ------------------------------------------------------------------ world
@@ -186,6 +188,7 @@ namespace ui {
 void say(txt::Group g);
 void say_line(txt::Id id);
 bool dialog_open();
+bool line_said(txt::Id id);  // the last single line (thought or hint) was this one
 bool dialog_typing();
 void dialog_press();
 void dialog_update(float dt);

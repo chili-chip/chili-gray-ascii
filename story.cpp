@@ -79,6 +79,24 @@ const Combo combos[] = {
     {clue::paper, clue::photo, clue::w_mewa, GROUP_COUNT},
 };
 
+// A thought when the second clue of a pair arrives: plain in chapter 1,
+// vaguer later, none from chapter 4 on.
+struct Nudge {
+    clue::Id a, b;
+    txt::Id said;
+    int8_t last_chapter;
+};
+const Nudge nudges[] = {
+    {clue::bike, clue::nosand, think_bike, 3},
+    {clue::h_evening, clue::h_bike, think_saw, 3},
+    {clue::cap, clue::trail, think_cap, 3},
+    {clue::r_time, clue::k_time, think_lie, 3},
+    {clue::boots, clue::boatlight, think_boat, 3},
+    {clue::photo, clue::woman, think_kowal, 3},
+    {clue::aurora, clue::h_asked, think_waits, 3},
+    {clue::paper, clue::photo, think_mewa, 3},
+};
+
 // ------------------------------------------------------------ showing
 
 struct Show {
@@ -181,7 +199,31 @@ void grant_until(int ch) {
 }
 
 // Called after every new clue or flag: is the chapter finished?
-void after_clue(clue::Id) {
+// is there a pair in the notebook that is waiting to be combined?
+bool combo_waiting() {
+    for(const auto &k : combos)
+        if(has(k.a) && has(k.b) && !has(k.result)) return true;
+    return false;
+}
+
+void after_clue(clue::Id c) {
+    if(c != clue::COUNT) {
+        for(const auto &n : nudges) {
+            if(st.chapter > n.last_chapter) continue;
+            clue::Id other = n.a == c ? n.b : n.b == c ? n.a : clue::COUNT;
+            if(other == clue::COUNT || !has(other)) continue;
+            bool done = false;
+            for(const auto &k : combos)
+                if(((k.a == n.a && k.b == n.b) || (k.a == n.b && k.b == n.a)) && has(k.result)) done = true;
+            if(!done) { line(n.said); break; }
+        }
+    }
+    // showing is the least obvious thing in the game: the first time it is
+    // needed, Szary says so
+    if(st.chapter == 2 && !flag(F_SHOW_THOUGHT) && has(clue::r_time) && flag(F_KUBA1) && !has(clue::k_time)) {
+        set_flag(F_SHOW_THOUGHT);
+        line(think_show);
+    }
     switch(st.chapter) {
     case 1:
         if(!flag(F_CH1_DONE) && has(clue::lamp) && has(clue::log) && has(clue::bike) && flag(F_HALINA1)) {
@@ -339,6 +381,7 @@ void use_hotspot(int i) {
     case H_DU_HALINA:
         if(ch == 5) {
             if(!flag(F_BOARD3)) say(G_final_not_ready);
+            else if(!has(clue::fuse) || !has(clue::page)) say(G_final_missing);  // the choices need both
             else {
                 say(G_halina_final);
                 push(A_CHOICE, CH_FINAL);
@@ -482,6 +525,24 @@ void show(Person p, clue::Id c) {
     say(fallback[p]);
 }
 
+bool clue_spent(clue::Id c) {
+    // a clue is spent when everything it can still do is done; clues that
+    // were never part of a combination or a useful show stay bright, so
+    // the notebook does not give away the red herrings
+    bool used = false;
+    for(const auto &k : combos) {
+        if(k.a != c && k.b != c) continue;
+        used = true;
+        if(!has(k.result)) return false;
+    }
+    for(const auto &k : shows) {
+        if(k.c != c || k.gives == clue::COUNT) continue;
+        used = true;
+        if(!has(k.gives)) return false;
+    }
+    return used;
+}
+
 bool met(Person p) {
     switch(p) {
     case P_HALINA: return flag(F_HALINA1);
@@ -530,7 +591,9 @@ int questions(Id out[8], bool closed[8], int8_t brd[8]) {
 
 int places(Place out[PL_COUNT]) {
     int n = 0;
-    if(st.chapter >= 1) { out[n++] = PL_DUNES; out[n++] = PL_LIGHTHOUSE; }
+    // only places Szary has been to, or that the story has just sent him to
+    if(st.chapter >= 1) out[n++] = PL_DUNES;
+    if(flag(F_LH_ENTERED)) out[n++] = PL_LIGHTHOUSE;
     if(flag(F_CH1_DONE)) out[n++] = PL_BAR;
     if(flag(F_CH2_DONE)) { out[n++] = PL_PIER; out[n++] = PL_OFFICE; }
     if(flag(F_BUNKER_OPEN)) out[n++] = PL_BUNKER;
@@ -601,11 +664,25 @@ bool board_submit(Board b, const uint8_t picks[3]) {
 
 // ================================================================ hints
 
+float hint_delay_s() {
+    // early on the player is still learning the notebook
+    static const float delay[] = {45.0f, 45.0f, 60.0f, 90.0f, 120.0f, 150.0f};
+    return delay[st.chapter < 0 ? 0 : st.chapter > 5 ? 5 : st.chapter];
+}
+
 Id hint() {
+    // in the first chapters, an open pair in the notebook comes first
+    if(st.chapter <= 2 && combo_waiting()) return hint_combine;
     switch(st.chapter) {
     case 0: return hint_prolog;
-    case 1: return hint_ch1;
+    case 1:
+        // only what Szary has seen or could guess: no names before he meets them
+        if(!has(clue::lamp) || !has(clue::log)) return hint_ch1a;
+        if(!has(clue::bike)) return hint_ch1b;
+        if(!flag(F_HALINA1)) return hint_ch1c;
+        return hint_ch1d;
     case 2:
+        if(has(clue::r_time) && flag(F_KUBA1) && !has(clue::k_time)) return hint_ch2b;
         if(!(flag(F_RYSIEK1) && flag(F_KUBA1) && has(clue::boots))) return hint_ch2a;
         if(!has(clue::w_lie)) return hint_ch2b;
         return hint_ch2c;
@@ -613,8 +690,10 @@ Id hint() {
     case 4:
         if(!flag(F_TRAIL4)) return hint_ch4a;
         if(!flag(F_BUNKER_OPEN)) return has(clue::crowbar) ? hint_ch4a : hint_ch4b;
-        return hint_ch4c;
-    default: return hint_ch5;
+        return flag(F_BOGDAN1) ? hint_ch4c : hint_ch4d;
+    default:
+        if(!flag(F_BOARD3)) return hint_ch5a;
+        return has(clue::fuse) && has(clue::page) ? hint_ch5b : hint_ch5c;
     }
 }
 

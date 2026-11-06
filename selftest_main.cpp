@@ -323,7 +323,15 @@ void test_texts() {
         for(int i = q_light; i <= q_final; i++) CHECK(font::length(text[i][l]) <= 28, "question too long: %s", text[i][l]);
         for(int i = board1_s1; i <= board3_s3; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 2, "board line too long: %s", text[i][l]);
         for(int i = choice_final_q; i <= choice_page_b; i++) CHECK(ui::wrap_lines(text[i][l], 28) <= 2, "choice too long: %s", text[i][l]);
-        for(int i = hint_prolog; i <= hint_ch5; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        for(int i = hint_combine; i <= hint_ch5c; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        // the log must not say K. is a woman: Kuba is the one who notices
+        for(const char *s : {text[lh_log_1][l], clue::note[clue::log][l]})
+            for(const char *w : {"PRZYSZŁA", "PRZYNIOSŁA", "HER ", "SHE "})
+                CHECK(!strstr(s, w), "the log gives away K.: %s", s);
+        // the notebook must not name people Szary has not met yet
+        for(int i = hint_prolog; i <= hint_ch1c; i++)
+            for(const char *w : {"HALIN", "KOBIET", "WOMAN", "KUBA"})
+                CHECK(!strstr(text[i][l], w), "hint gives away %s: %s", w, text[i][l]);
         for(int i = place_dunes; i <= place_station; i++) CHECK(font::length(text[i][l]) <= 26, "place too long: %s", text[i][l]);
         for(int i = 0; i < clue::COUNT; i++) {
             CHECK(font::has_all_glyphs(clue::name[i][l]) && font::has_all_glyphs(clue::note[i][l]), "clue %d glyphs", i);
@@ -389,6 +397,11 @@ void play_to_chapter5() {
     CHECK(flag(F_TELEX), "telex read");
     use(114, "door");
     CHECK(st.chapter == 1 && st.scene == S_DUNES, "chapter 1 on the dunes");
+    CHECK(story::hint() == txt::hint_ch1a, "the first hint points at the lighthouse");
+    {
+        Place p[PL_COUNT];
+        CHECK(story::places(p) == 1 && p[0] == PL_DUNES, "the map has only the dunes before the lighthouse");
+    }
 
     // chapter 1
     recording = true;
@@ -397,6 +410,10 @@ void play_to_chapter5() {
     recording = false;
     use(150, "lighthouse door");
     CHECK(st.scene == S_LIGHTHOUSE && has(clue::door), "inside the lighthouse");
+    {
+        Place p[PL_COUNT];
+        CHECK(story::places(p) == 2 && p[1] == PL_LIGHTHOUSE, "the lighthouse is on the map once visited");
+    }
     use(32, "log");
     shot("03-lighthouse-inside");
     use(58, "cap");
@@ -418,6 +435,8 @@ void play_to_chapter5() {
     wait(100);
     shot("04-trail-torch");
     use(334, "trail end");
+    CHECK(ui::line_said(txt::think_cap), "Szary thinks the cap and the trail belong together");
+    CHECK(story::hint() == txt::hint_combine && !flag(F_HALINA1), "the cap and the trail wait: the hint says combine");
     recording = true;
     use(494, "Halina");
     recording = false;
@@ -428,8 +447,19 @@ void play_to_chapter5() {
     shot("05-halina-fire");
     CHECK(has(clue::barrel), "the barrel was dragged");
     combine(clue::bike, clue::nosand, clue::w_rider);
+    CHECK(story::clue_spent(clue::bike) && story::clue_spent(clue::nosand), "combined clues are spent");
+    CHECK(!story::clue_spent(clue::lamp) && !story::clue_spent(clue::door), "clues never combined stay bright");
     combine(clue::h_evening, clue::h_bike, clue::w_saw);
     combine(clue::cap, clue::trail, clue::w_led);
+    CHECK(story::hint() == txt::hint_ch1d, "nothing left to combine: the hint points at the bar");
+    CHECK(story::hint_delay_s() < 60.0f, "chapter 1 helps sooner than later chapters");
+    {
+        // pressing A on something already seen does not hold the hint back
+        st.idle_s = 40.0f;
+        use(518, "barrel again");
+        CHECK(st.idle_s >= 40.0f, "looking again is not progress");
+        st.idle_s = 0.0f;
+    }
     press(Button::X);
     shot("06-notebook-clues");
     press(Button::DPAD_RIGHT);
@@ -458,6 +488,8 @@ void play_to_chapter5() {
     use(30, "Rysiek");
     recording = false;
     use(108, "Kuba");
+    CHECK(ui::line_said(txt::think_show) && flag(F_SHOW_THOUGHT), "Szary says to show Rysiek's words to Kuba");
+    CHECK(story::hint() == txt::hint_ch2b, "the hint says the same until it is done");
     use(126, "boots");
     use(150, "window");
     use(82, "photo");
@@ -575,6 +607,15 @@ void test_play() {
     txt::Id q[8]; bool closed[8]; int8_t b[8];
     int n = story::questions(q, closed, b);
     for(int i = 0; i < n; i++) CHECK(closed[i], "question %d still open at the end", i);
+    {
+        // without the fuse the choice to light the lamp would make no sense
+        st.clues &= ~(uint64_t(1) << clue::fuse);
+        CHECK(story::hint() == txt::hint_ch5c, "the hint sends Szary back for the fuse");
+        use(494, "Halina without the fuse");
+        CHECK(mode() != M_CHOICE, "no choice without the fuse");
+        settle();
+        st.clues |= uint64_t(1) << clue::fuse;
+    }
     use(494, "Halina final");
     CHECK(mode() == M_CHOICE, "the last choice");
     press(Button::DPAD_DOWN);
