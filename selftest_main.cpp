@@ -607,6 +607,15 @@ void test_play() {
     txt::Id q[8]; bool closed[8]; int8_t b[8];
     int n = story::questions(q, closed, b);
     for(int i = 0; i < n; i++) CHECK(closed[i], "question %d still open at the end", i);
+    {
+        // without the fuse the choice to light the lamp would make no sense
+        st.clues &= ~(uint64_t(1) << clue::fuse);
+        CHECK(story::hint() == txt::hint_ch5c, "the hint sends Szary back for the fuse");
+        use(494, "Halina without the fuse");
+        CHECK(mode() != M_CHOICE, "no choice without the fuse");
+        settle();
+        st.clues |= uint64_t(1) << clue::fuse;
+    }
     use(494, "Halina final");
     CHECK(mode() == M_CHOICE, "the last choice");
     press(Button::DPAD_DOWN);
