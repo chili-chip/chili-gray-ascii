@@ -323,7 +323,11 @@ void test_texts() {
         for(int i = q_light; i <= q_final; i++) CHECK(font::length(text[i][l]) <= 28, "question too long: %s", text[i][l]);
         for(int i = board1_s1; i <= board3_s3; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 2, "board line too long: %s", text[i][l]);
         for(int i = choice_final_q; i <= choice_page_b; i++) CHECK(ui::wrap_lines(text[i][l], 28) <= 2, "choice too long: %s", text[i][l]);
-        for(int i = hint_prolog; i <= hint_ch5; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        for(int i = hint_prolog; i <= hint_ch5b; i++) CHECK(ui::wrap_lines(text[i][l], 31) <= 4, "hint too long: %s", text[i][l]);
+        // the notebook must not name people Szary has not met yet
+        for(int i = hint_prolog; i <= hint_ch1c; i++)
+            for(const char *w : {"HALIN", "KOBIET", "WOMAN", "KUBA"})
+                CHECK(!strstr(text[i][l], w), "hint gives away %s: %s", w, text[i][l]);
         for(int i = place_dunes; i <= place_station; i++) CHECK(font::length(text[i][l]) <= 26, "place too long: %s", text[i][l]);
         for(int i = 0; i < clue::COUNT; i++) {
             CHECK(font::has_all_glyphs(clue::name[i][l]) && font::has_all_glyphs(clue::note[i][l]), "clue %d glyphs", i);
@@ -389,6 +393,7 @@ void play_to_chapter5() {
     CHECK(flag(F_TELEX), "telex read");
     use(114, "door");
     CHECK(st.chapter == 1 && st.scene == S_DUNES, "chapter 1 on the dunes");
+    CHECK(story::hint() == txt::hint_ch1a, "the first hint points at the lighthouse");
 
     // chapter 1
     recording = true;
@@ -418,6 +423,7 @@ void play_to_chapter5() {
     wait(100);
     shot("04-trail-torch");
     use(334, "trail end");
+    CHECK(story::hint() == txt::hint_ch1c && !flag(F_HALINA1), "before Halina the hint only mentions a fire");
     recording = true;
     use(494, "Halina");
     recording = false;

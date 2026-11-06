@@ -2,7 +2,7 @@
 
 A short noir detective story for the ChiliChip **VGC Zero** (RP2350, 128x128), drawn only with ASCII characters in shades of grey. Built on the [chili-chip fork of the 32blit SDK](https://github.com/chili-chip/32blit-sdk); it also runs on desktop (SDL) and in the browser.
 
-**Status: the whole story is playable (v0.2.0).** Five chapters, four endings, Polish and English. The frame rate on a real console is not measured yet.
+**Status: the whole story is playable (v0.2.1).** Five chapters, four endings, Polish and English. The frame rate on a real console is not measured yet.
 
 ![Szary on the dunes](docs/szary.gif)
 

@@ -604,7 +604,12 @@ bool board_submit(Board b, const uint8_t picks[3]) {
 Id hint() {
     switch(st.chapter) {
     case 0: return hint_prolog;
-    case 1: return hint_ch1;
+    case 1:
+        // only what Szary has seen or could guess: no names before he meets them
+        if(!has(clue::lamp) || !has(clue::log)) return hint_ch1a;
+        if(!has(clue::bike)) return hint_ch1b;
+        if(!flag(F_HALINA1)) return hint_ch1c;
+        return hint_ch1d;
     case 2:
         if(!(flag(F_RYSIEK1) && flag(F_KUBA1) && has(clue::boots))) return hint_ch2a;
         if(!has(clue::w_lie)) return hint_ch2b;
@@ -613,8 +618,8 @@ Id hint() {
     case 4:
         if(!flag(F_TRAIL4)) return hint_ch4a;
         if(!flag(F_BUNKER_OPEN)) return has(clue::crowbar) ? hint_ch4a : hint_ch4b;
-        return hint_ch4c;
-    default: return hint_ch5;
+        return flag(F_BOGDAN1) ? hint_ch4c : hint_ch4d;
+    default: return flag(F_BOARD3) ? hint_ch5b : hint_ch5a;
     }
 }
 
