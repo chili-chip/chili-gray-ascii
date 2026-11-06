@@ -381,6 +381,7 @@ void use_hotspot(int i) {
     case H_DU_HALINA:
         if(ch == 5) {
             if(!flag(F_BOARD3)) say(G_final_not_ready);
+            else if(!has(clue::fuse) || !has(clue::page)) say(G_final_missing);  // the choices need both
             else {
                 say(G_halina_final);
                 push(A_CHOICE, CH_FINAL);
@@ -690,7 +691,9 @@ Id hint() {
         if(!flag(F_TRAIL4)) return hint_ch4a;
         if(!flag(F_BUNKER_OPEN)) return has(clue::crowbar) ? hint_ch4a : hint_ch4b;
         return flag(F_BOGDAN1) ? hint_ch4c : hint_ch4d;
-    default: return flag(F_BOARD3) ? hint_ch5b : hint_ch5a;
+    default:
+        if(!flag(F_BOARD3)) return hint_ch5a;
+        return has(clue::fuse) && has(clue::page) ? hint_ch5b : hint_ch5c;
     }
 }
 
