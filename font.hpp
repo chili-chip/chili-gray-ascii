@@ -35,6 +35,13 @@ void ch(int x, int y, char c, int shade);
 // One mark of the micro font: '.', ':', '-', '\'', '~', '_', '|', '+'.
 void micro(int x, int y, char c, int shade);
 
+// A solid line of `len` pixels.
+void hline(int x, int y, int len, int shade);
+// A small pixel picture (a face): rows of equal width, drawn facing right,
+// mirrored when dir < 0. 'S' skin, 's' skin in shade, 'H' hair or hat,
+// 'h' a light band, 'E' a black eye; anything else is see-through.
+void pixels(int x, int y, const char *const *rows, int n, int dir, int skin, int hair);
+
 // UTF-8 text on one line; returns the number of characters drawn.
 int text(int x, int y, std::string_view utf8, int shade, int max_chars = 1 << 30);
 // Number of characters (not bytes) in a UTF-8 string.

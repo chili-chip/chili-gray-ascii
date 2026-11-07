@@ -231,6 +231,36 @@ void ch(int x, int y, char c, int shade) {
     glyph(x, y, i, shade);
 }
 
+void hline(int x, int y, int len, int shade) {
+    ready_pens();
+    shade = clamp_shade(shade);
+    if(shade == 0) return;
+    span(x, y, len, shade);
+}
+
+void pixels(int x, int y, const char *const *rows, int n, int dir, int skin, int hair) {
+    ready_pens();
+    int w = 0;
+    while(rows[0][w]) w++;
+    for(int r = 0; r < n; r++) {
+        for(int c = 0; rows[r][c]; c++) {
+            int s;
+            switch(rows[r][c]) {
+            case 'S': s = skin; break;            // skin
+            case 's': s = skin - 1; break;        // skin in shadow
+            case 'H': s = hair; break;            // hair, hat, hood
+            case 'h': s = hair + 2; break;        // light band on a hat
+            case 'E': s = 0; break;               // eye: a black pixel
+            default: continue;                    // see-through
+            }
+            if(s < 0) s = 0;
+            s = clamp_shade(s);
+            int px = dir < 0 ? x + (w - 1 - c) : x + c;
+            span(px, y + r, 1, s);
+        }
+    }
+}
+
 void micro(int x, int y, char c, int shade) {
     ready_pens();
     shade = clamp_shade(shade);
