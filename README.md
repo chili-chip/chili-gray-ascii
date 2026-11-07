@@ -2,7 +2,7 @@
 
 A short noir detective story for the ChiliChip **VGC Zero** (RP2350, 128x128), drawn only with ASCII characters in shades of grey. Built on the [chili-chip fork of the 32blit SDK](https://github.com/chili-chip/32blit-sdk); it also runs on desktop (SDL) and in the browser.
 
-**Status: the whole story is playable (v0.2.1).** Five chapters, four endings, Polish and English. The frame rate on a real console is not measured yet.
+**Status: the whole story is playable (v0.3.0).** Five chapters, four endings, Polish and English. It runs at 50 FPS on a VGC Zero (measured 2026-11-07).
 
 ![Szary on the dunes](docs/szary.gif)
 
@@ -10,7 +10,7 @@ A short noir detective story for the ChiliChip **VGC Zero** (RP2350, 128x128), d
 
 Wydma, a small Baltic seaside town in November, off-season. The lighthouse went dark at 22:40 and the keeper is gone. Detective Szary has one night: the dunes, the lighthouse, the Gull Bar, the harbour and an old bunker. About an hour to play. The weather gets worse every chapter, from a breeze to a storm, and then dawn.
 
-The wind is part of the case: grass that lies **against** the wind was stepped on, so it shows where someone walked. You need the torch to see it.
+The wind is part of the case: grass that lies **against** the wind was stepped on, so it shows where someone walked. You need the torch to see it, and to find anything in the dark bunker. When a spot needs light, the prompt says **Y: TORCH**.
 
 ## How it plays
 
@@ -45,6 +45,8 @@ On a PC: arrow keys, `Z` = A, `X` = B, `C` = X, `V` = Y, `Esc` or `2` = MENU.
 - Characters are placed on any pixel, not on a grid, so movement is smooth (one pixel at a time).
 - Eight greys, 0 = black (the OLED pixel is off).
 - Glyphs are drawn as horizontal spans straight into the screen with the surface's blend function, not pixel by pixel.
+- Faces are tiny pixel pictures (hair or hat, a black eye, a nose that shows which way the person looks), not letters: an `o` for a head read as a light bulb.
+- Rooms are plain: ceiling, a wainscot rail and the floor as clean lines. A dotted brick texture looked like noise on the OLED.
 - Light: the torch is a cone in front of Szary; lamps, the fire and the relit lighthouse add light around them.
 
 ## Code
@@ -105,9 +107,8 @@ Make the GIF from a clip: `ffmpeg -framerate 25 -i DIR/f%05d.ppm -vf "scale=384:
 
 ## Next
 
-1. Measure the frame rate on a console (MENU, then FPS counter). The goal is a steady 30 fps or more.
-2. Two or three people play it through: is it clear, is it too long, does the ending land?
-3. A game page on chilichip.eu/games.
+1. Two or three people play it through: is it clear, is it too long, does the ending land?
+2. A game page on chilichip.eu/games.
 
 ## Licence
 

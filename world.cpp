@@ -214,6 +214,67 @@ void draw_parts(const Part *parts, int n, int x, int y, int dir, int base_shade)
     }
 }
 
+// Faces are small pixel pictures, not letters: an 'o' for a head read as a
+// light bulb. Drawn facing right, 8 px wide, centred on the body; dir < 0
+// mirrors them.
+const char *const FACE_SZARY[] = {
+    ".HSSSSS.",
+    ".HSSSES.",
+    ".HSSSSSS",
+    ".HSSSs..",
+    "..SSs...",
+    "...ss...",
+};
+const char *const FACE_HALINA[] = {
+    "..HHHH..",
+    ".HHHHHH.",
+    "HHHSSSS.",
+    "HHHSSES.",
+    "HHHSSSSS",
+    ".HHSSs..",
+    "..HHss..",
+    "...HH...",
+};
+const char *const FACE_KUBA[] = {
+    "..HHHH..",
+    ".HHHHHH.",
+    "HHHHSSS.",
+    "HHHSSES.",
+    "HHHSSSSS",
+    "HHHSSs..",
+    ".HHH....",
+};
+const char *const FACE_RYSIEK[] = {
+    "..SSSS..",
+    ".SSSSSS.",
+    ".SSSSES.",
+    ".HSSSSSS",
+    ".HSHHHH.",
+    ".SSSSS..",
+    "..sss...",
+};
+const char *const FACE_JASINSKI[] = {
+    "..HHHH..",
+    ".hhhhhh.",
+    ".HHHHHHH",
+    ".HSSSES.",
+    ".HSSSSSS",
+    ".HHSSSS.",
+    ".HHHHHH.",
+    "..HHHH..",
+};
+const char *const FACE_BOGDAN[] = {  // lying on his back: crown left, nose up
+    "....S...",
+    ".HSESS..",
+    "HHSSSSS.",
+    ".HHSSs..",
+};
+
+template <int N>
+void face(const char *const (&rows)[N], int x, int y, int dir, int skin, int hair) {
+    font::pixels(x - 3, y, rows, N, dir, skin, hair);
+}
+
 // ---------------------------------------------------------------- sky, sea
 
 void draw_sky(bool clouds_heavy) {
@@ -475,7 +536,6 @@ void draw_szary(int sx, int feet) {
     static const Part body[] = {
         {3, 0, SOLID, -3}, {5, 0, SOLID, -3},
         {0, 3, '-', 0}, {3, 3, '-', 0}, {6, 3, '-', 0},
-        {4, 6, 'o', 1}, {7, 6, '.', 0},
         {2, 12, SOLID, -3}, {5, 12, SOLID, -3},
         {2, 16, SOLID, -3}, {5, 16, SOLID, -3},
         {2, 20, SOLID, -3}, {5, 20, SOLID, -3},
@@ -485,6 +545,7 @@ void draw_szary(int sx, int feet) {
     };
     int base = 5 + (outdoors(st.scene) || st.scene == S_BUNKER || st.scene == S_LIGHTHOUSE ? 0 : 1);
     draw_parts(body, int(sizeof(body) / sizeof(body[0])), sx, top, st.facing, base);
+    face(FACE_SZARY, sx, top + 7, st.facing, base, base - 3);
     if(st.torch) {
         static const Part lamp[] = {{10, 14, '=', 0}};
         draw_parts(lamp, 1, sx, top, st.facing, 7);
@@ -513,13 +574,12 @@ void draw_halina() {
     int top = feet - 24;
     int lit = light_at(hx, top + 10);
     static const Part body[] = {
-        {3, 0, '^', 0},
-        {1, 3, '(', 0}, {4, 4, 'o', 1}, {7, 3, ')', 0},
         {3, 9, SOLID, -2}, {5, 9, SOLID, -2}, {1, 9, '/', 0}, {7, 9, '\\', 0},
         {3, 13, SOLID, -2}, {5, 13, SOLID, -2},
         {0, 17, '/', 0}, {3, 17, SOLID, -2}, {5, 17, SOLID, -2}, {8, 17, '\\', 0},
     };
     draw_parts(body, int(sizeof(body) / sizeof(body[0])), hx, top, 1, 2 + lit);
+    face(FACE_HALINA, hx, top + 1, 1, 3 + lit, 2 + lit);
     int sway = sinf(t * 1.5f) > 0.6f ? 1 : 0;
     font::ch(hx + 4 + sway, top + 10, '-', 2 + lit);
 }
@@ -683,25 +743,15 @@ void draw_pier() {
 
 void room_walls(int width, int shade) {
     int left = -int(cam);
-    // brick texture on the back wall
-    for(int y = 30; y < ROOM_FLOOR; y += 6) {
-        int off = ((y / 6) & 1) * 6;
-        for(int x = left + off; x < left + width; x += 12) {
-            if(x < -4 || x >= SCREEN) continue;
-            int l = light_at(x + 1, y + 1);
-            if(l == 0 && (hash(uint32_t(x - left) * 7u + uint32_t(y)) % 3)) continue;
-            font::micro(x, y, '_', shade + l);
-        }
-    }
-    // the floor
-    for(int x = left; x < left + width; x += 4) {
-        if(x < -4 || x >= SCREEN) continue;
-        int l = light_at(x + 1, ROOM_FLOOR + 1);
-        font::micro(x, ROOM_FLOOR, '_', 2 + l);
-        if(((x - left) / 4) % 3 == 0) font::micro(x, ROOM_FLOOR + 6, '.', 1 + l);
-    }
-    // ceiling beam
-    for(int x = left; x < left + width; x += 4) font::micro(x, 28, '-', shade);
+    int x0 = left < 0 ? 0 : left, x1 = left + width > SCREEN ? SCREEN : left + width;
+    if(x1 <= x0) return;
+    // a plain back wall: ceiling, a wainscot rail and the floor as clean
+    // lines (a dotted brick texture looked like noise on the OLED)
+    font::hline(x0, 28, x1 - x0, shade + 1);
+    font::hline(x0, 86, x1 - x0, shade);
+    for(int x = left + 2; x < left + width; x += 16)
+        if(x >= 0 && x < SCREEN) font::micro(x, 88, '|', shade);
+    font::hline(x0, ROOM_FLOOR + 2, x1 - x0, 2);
 }
 
 void draw_station() {
@@ -810,7 +860,11 @@ void draw_bar() {
 
 void draw_counter() {
     int o = -int(cam);
-    art(o + 14, 92, "@@@@@@@@@@@@\n|==========|\n|          |", 3);
+    // solid front, so Rysiek stands right behind it with no gap
+    screen.pen = Pen(0, 0, 0);
+    screen.rectangle(Rect(o + 14, 92, 48, ROOM_FLOOR + 2 - 92));
+    font::hline(o + 13, 92, 50, 4);
+    art(o + 14, 94, "|          |\n|          |\n|__________|", 3);
 }
 
 void draw_office() {
@@ -861,11 +915,12 @@ void draw_kuba() {
     int x = -int(cam) + 108;
     int top = ROOM_FLOOR - 28;
     static const Part body[] = {
-        {2, 0, '(', 0}, {4, 0, '^', 0}, {6, 0, ')', 0}, {4, 4, 'o', 1},
         {2, 9, SOLID, -2}, {5, 9, SOLID, -2}, {0, 9, '/', 0},
         {2, 13, SOLID, -2}, {5, 13, SOLID, -2},
     };
-    draw_parts(body, int(sizeof(body) / sizeof(body[0])), x, top, -1, 4 + light_at(x, top + 8));
+    int kl = light_at(x, top + 8);
+    draw_parts(body, int(sizeof(body) / sizeof(body[0])), x, top, -1, 4 + kl);
+    face(FACE_KUBA, x, top + 1, -1, 5 + kl, 2 + kl);
     int jig = fmodf(t, 0.4f) < 0.2f ? 1 : 0;
     font::ch(x - 4, top + 18 - jig, '/', 3);
     font::ch(x, top + 18, '|', 3);
@@ -878,12 +933,12 @@ void draw_rysiek() {
     int x = -int(cam) + 30;
     int top = ROOM_FLOOR - 40;
     static const Part body[] = {
-        {2, 0, '_', 0}, {5, 0, '_', 0}, {1, 4, '(', -1}, {4, 4, 'o', 1}, {7, 4, ')', -1},
-        {4, 8, '-', 0},
         {0, 12, '/', 0}, {2, 12, SOLID, -2}, {5, 12, SOLID, -2}, {8, 12, '\\', 0},
         {2, 16, SOLID, -2}, {5, 16, SOLID, -2},
     };
-    draw_parts(body, int(sizeof(body) / sizeof(body[0])), x, top, 1, 4 + light_at(x, top + 8));
+    int rl = light_at(x, top + 8);
+    draw_parts(body, int(sizeof(body) / sizeof(body[0])), x, top, 1, 4 + rl);
+    face(FACE_RYSIEK, x, top + 4, 1, 5 + rl, 2 + rl);
     int wipe = int(sinf(t * 4.0f) * 2.0f);
     font::ch(x + 8 + wipe, top + 15, 'u', 5);
 }
@@ -893,10 +948,11 @@ void draw_jasinski() {
     int x = -int(cam) + 44;
     int top = ROOM_FLOOR - 34;
     static const Part body[] = {
-        {1, 0, '_', 0}, {4, 0, SOLID, -2}, {7, 0, '_', 0}, {4, 5, 'o', 1}, {4, 9, 'w', 0},
         {2, 13, SOLID, -2}, {5, 13, SOLID, -2}, {0, 13, '/', 0}, {8, 13, '\\', 0},
     };
-    draw_parts(body, int(sizeof(body) / sizeof(body[0])), x, top, 1, 4 + light_at(x, top + 8));
+    int jl = light_at(x, top + 8);
+    draw_parts(body, int(sizeof(body) / sizeof(body[0])), x, top, 1, 4 + jl);
+    face(FACE_JASINSKI, x, top + 4, 1, 5 + jl, 3 + jl);
 }
 
 // Bogdan lying on the floor of the bunker, under a blanket once covered.
@@ -904,12 +960,14 @@ void draw_bogdan() {
     int x = -int(cam) + 46;
     int y = ROOM_FLOOR - 8;
     bool covered = flag(F_BOGDAN1);
-    const char *s = covered ? "o@~~~~~" : "o=====<";
-    for(int i = 0; s[i]; i++) {
+    const char *s = covered ? " @~~~~~" : " =====<";
+    for(int i = 1; s[i]; i++) {
         char c = s[i] == '@' ? SOLID : s[i];
         int l = light_at(x + i * 4 + 1, y + 3);
-        font::ch(x + i * 4, y, c, (covered ? 2 : 2) + l);
+        font::ch(x + i * 4, y, c, 2 + l);
     }
+    int hl = light_at(x + 2, y + 3);
+    face(FACE_BOGDAN, x + 2, y + 2, 1, 3 + hl, 1 + hl);
     // breathing
     if(fmodf(t, 3.0f) < 1.5f) font::micro(x - 4, y - 2, '.', 1 + light_at(x - 4, y));
 }

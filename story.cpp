@@ -331,8 +331,21 @@ bool hotspot_active(int i) {
     }
 }
 
+// Spots the torch has to light before Szary can see anything there: the
+// bent grass and the dark corners of the bunker.
+bool hotspot_dark(int i) {
+    if(st.torch) return false;
+    switch(i) {
+    case H_DU_TRAIL: case H_DU_TRAIL2: case H_DU_TRAIL3: case H_DU_TRAIL4:
+    case H_BU_POCKET: case H_BU_SHELF:
+        return true;
+    default: return false;
+    }
+}
+
 void use_hotspot(int i) {
     int ch = st.chapter;
+    if(hotspot_dark(i)) { say(G_trail_dark); return; }
     switch(i) {
     // ---------------------------------------------------- station
     case H_ST_WINDOW: say(G_prolog_window); break;
@@ -359,10 +372,7 @@ void use_hotspot(int i) {
         say(G_bike);
         give(clue::bike);
         break;
-    case H_DU_TRAIL:
-        if(!st.torch) say(G_trail_dark);
-        else { say(G_trail); give(clue::trail); }
-        break;
+    case H_DU_TRAIL: say(G_trail); give(clue::trail); break;
     case H_DU_TRAILEND:
         say(G_trail_end);
         mark(F_TRAIL_END);
@@ -370,7 +380,6 @@ void use_hotspot(int i) {
     case H_DU_TRAIL2:
     case H_DU_TRAIL3:
     case H_DU_TRAIL4: {
-        if(!st.torch) { say(G_trail_dark); break; }
         static const Group g[3] = {G_trail2, G_trail3, G_trail4};
         static const Flag f[3] = {F_TRAIL2, F_TRAIL3, F_TRAIL4};
         int k = i - H_DU_TRAIL2;

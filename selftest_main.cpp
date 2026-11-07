@@ -552,6 +552,10 @@ void play_to_chapter5() {
     recording = true;
     use(56, "Bogdan");
     recording = false;
+    torch(false);
+    use(104, "shelf in the dark");
+    CHECK(!has(clue::fuse), "the shelf needs the torch");
+    torch(true);
     use(74, "pocket");
     shot("13-bunker");
     use(104, "shelf");

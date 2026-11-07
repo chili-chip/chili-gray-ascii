@@ -435,7 +435,8 @@ void render(uint32_t time) {
                     static const txt::Id labels[4] = {txt::ui_look, txt::ui_talk, txt::ui_enter, txt::ui_exit};
                     const Hotspot &hs = story::hotspot(h);
                     int y = int(world::floor_y(st.scene, float(hs.x))) - 44;
-                    ui::prompt(world::screen_x(float(hs.x)), y, labels[hs.kind]);
+                    txt::Id label = story::hotspot_dark(h) ? txt::ui_torch : labels[hs.kind];
+                    ui::prompt(world::screen_x(float(hs.x)), y, label);
                 }
             }
             ui::dialog_draw();

@@ -126,6 +126,7 @@ void grant_until(int ch);  // clues and flags of a normal play before chapter ch
 int hotspot_count();
 const Hotspot &hotspot(int i);
 bool hotspot_active(int i);
+bool hotspot_dark(int i);  // needs the torch, and it is off
 void use_hotspot(int i);
 Person hotspot_person(int i);
 
